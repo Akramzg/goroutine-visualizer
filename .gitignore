@@ -1,0 +1,14 @@
+/goroutine-vis
+
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test & OS
+
+*.test
+*.out
+.DS_Store 
