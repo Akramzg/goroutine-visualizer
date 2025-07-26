@@ -1,45 +1,51 @@
 package main
 import (
   "fmt"
-  "os"
   "github.com/Akramzg/goroutine-vis/internal/proc"
   "log"
-  "strconv"
+  "flag"
 
 )
 
 
  func main(){
 
-  if len(os.Args) < 2 {
-    fmt.Println("Usage: goroutine-vis <target-pid>")
-    os.Exit(1)
-  }
+  var port int
+  var pid int
 
-  pidStr := os.Args[1]
-  pid, err := strconv.Atoi(pidStr)
-  if err!=nil{
-    log.Fatalf("Invalid PID '%s': must be a number",pidStr)
-  }
+  flag.IntVar(&pid, "pid", 0, "Process Id to visualize")
+  flag.IntVar(&port, "port",8080, "Port number to listen on")
+  flag.Parse()
 
-  fmt.Printf("Starting Goroutine Visualizer for PID: %s\n", pidStr)
-  
+
+  if pid <= 0{
+    fmt.Println("Usage: goroutine-vis -pid=<target-pid>")
+    flag.PrintDefaults()
+    log.Fatalf("Missing or invalid PID")
+  }
+  if(port<1 || port>65535){
+    log.Fatalf("Invalid port number %d", port)
+  }
+  fmt.Printf("Starting Goroutine Visualizer for PID %d on PORT %d\n", pid, port)
+
+
   status, err := proc.ReadStatus(pid)
   if err != nil{
     log.Fatalf("Failed to read status: %v", err)
   }
 
-  fmt.Printf("Process Name: %s\n", status["Name"])
-  fmt.Printf("State:      %s\n", status["State"])
-  fmt.Printf("Parent Process ID %s\n", status["PPid"])
-  fmt.Printf("Number of Threads %s\n", status["Threads"])
-  fmt.Printf("Virtual memory allocated %s\n", status["VmPeak"])
-  fmt.Printf("Physical memory currently occupied by this process %s\n", status["VmRSS"])
+  fmt.Printf("PID: %d - %s - Threads %s - VmRSS %s\n",pid, status["Name"],status["Threads"],status["VmRSS"])
+  
+  // fetch and print raw goroutine dump
 
+  portStr := fmt.Sprintf("%d", port)
+  dump, err := proc.FetchGor(portStr)
+  if err != nil{
+    log.Fatalf("Failed to fetch goroutine dump:", err)
+  }
 
-
-
-
+  fmt.Println("\n--- Raw Goroutine Dump ---")
+  fmt.Println(dump)
 
 
 

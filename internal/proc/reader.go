@@ -4,15 +4,13 @@ import(
   "fmt"
   "os"
   "strings"
+  "net/http"
+  "io"
 )
 
 
 
 func ReadStatus(pid int) (map[string]string, error){
-
-
-
-
   stat := make(map[string]string)
   //prep & open the file
   path := fmt.Sprintf("/proc/%d/status",pid)
@@ -40,4 +38,23 @@ func ReadStatus(pid int) (map[string]string, error){
 
   return stat, nil
 
+}
+
+func FetchGor(port string) (string, error){
+  url := fmt.Sprintf("http://localhost:%s/debug/pprof/goroutine?debug=2",port)
+
+  // making GET req
+  resp, err := http.Get(url)
+  if err != nil{
+    return "", fmt.Errorf("failed to connect to target app: %v",err)
+  }
+  defer resp.Body.Close()
+  if resp.StatusCode != http.StatusOK{
+    return "", fmt.Errorf("bad status code received: %d", resp.StatusCode)
+  }
+  body, err := io.ReadAll(resp.Body)
+  if err != nil{
+    return "", fmt.Errorf("failed to read response body: %v", err)
+  }
+  return string(body), nil
 }
