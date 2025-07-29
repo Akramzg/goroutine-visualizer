@@ -4,7 +4,7 @@ import (
   "github.com/Akramzg/goroutine-vis/internal/proc"
   "log"
   "flag"
-
+  "github.com/Akramzg/goroutine-vis/internal/parser"
 )
 
 
@@ -44,9 +44,6 @@ import (
     log.Fatalf("Failed to fetch goroutine dump:", err)
   }
 
-  fmt.Println("\n--- Raw Goroutine Dump ---")
-  fmt.Println(dump)
-
-
+  fmt.Println(parser.Parse(dump))
 
 } 
