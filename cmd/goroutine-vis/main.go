@@ -5,6 +5,7 @@ import (
   "log"
   "flag"
   "github.com/Akramzg/goroutine-vis/internal/parser"
+  "github.com/Akramzg/goroutine-vis/internal/display"
 )
 
 
@@ -14,7 +15,7 @@ import (
   var pid int
 
   flag.IntVar(&pid, "pid", 0, "Process Id to visualize")
-  flag.IntVar(&port, "port",8080, "Port number to listen on")
+  flag.IntVar(&port, "port",6060, "Port number to listen on")
   flag.Parse()
 
 
@@ -33,7 +34,6 @@ import (
   if err != nil{
     log.Fatalf("Failed to read status: %v", err)
   }
-
   fmt.Printf("PID: %d - %s - Threads %s - VmRSS %s\n",pid, status["Name"],status["Threads"],status["VmRSS"])
   
   // fetch and print raw goroutine dump
@@ -41,9 +41,15 @@ import (
   portStr := fmt.Sprintf("%d", port)
   dump, err := proc.FetchGor(portStr)
   if err != nil{
-    log.Fatalf("Failed to fetch goroutine dump:", err)
+    log.Fatalf("Failed to fetch goroutine dump: %v", err)
   }
 
-  fmt.Println(parser.Parse(dump))
+  goroutines, err := parser.Parse(dump)
+  if err!=nil{
+    log.Fatalf("Failed to parse goroutine dump: %v", err)
+  }
+  fmt.Printf("Total goroutines: %d\n\n", len(goroutines))
+  display.Render(status,goroutines)
+   
 
 } 
