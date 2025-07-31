@@ -1,55 +1,86 @@
 package main
+
 import (
-  "fmt"
-  "github.com/Akramzg/goroutine-vis/internal/proc"
-  "log"
-  "flag"
-  "github.com/Akramzg/goroutine-vis/internal/parser"
-  "github.com/Akramzg/goroutine-vis/internal/display"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/Akramzg/goroutine-vis/internal/display"
+	"github.com/Akramzg/goroutine-vis/internal/parser"
+	"github.com/Akramzg/goroutine-vis/internal/proc"
 )
 
+func main() {
+	// flags — all required except interval which defaults to 2s
+	var pid, port, interval int
+	flag.IntVar(&pid, "pid", 0, "target process pid")
+	flag.IntVar(&port, "port", 6060, "pprof port on target process")
+	flag.IntVar(&interval, "interval", 2, "refresh interval in seconds")
+	flag.Parse()
 
- func main(){
+	// basic validation before we even try to connect
+	if pid <= 0 {
+		fmt.Println("usage: goroutine-vis -pid=<pid> [-port=6060] [-interval=2]")
+		flag.PrintDefaults()
+		log.Fatalf("missing or invalid pid")
+	}
+	if port < 1 || port > 65535 {
+		log.Fatalf("invalid port: %d", port)
+	}
+	if interval <= 0 {
+		log.Fatalf("interval must be > 0")
+	}
 
-  var port int
-  var pid int
+	// intercept ctrl-c and sigterm so we exit cleanly
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Print("\033[H\033[2J")
+		fmt.Println("stopped. bye!")
+		os.Exit(0)
+	}()
 
-  flag.IntVar(&pid, "pid", 0, "Process Id to visualize")
-  flag.IntVar(&port, "port",6060, "Port number to listen on")
-  flag.Parse()
+	portStr := fmt.Sprintf("%d", port)
 
+	// renderFrame does the full fetch → parse → render cycle
+	// on any error it warns and bails early — next tick will retry
+	renderFrame := func() {
+		status, err := proc.ReadStatus(pid)
+		if err != nil {
+			fmt.Printf("\033[H\033[2J\n[warning] /proc read failed: %v\n", err)
+			return
+		}
 
-  if pid <= 0{
-    fmt.Println("Usage: goroutine-vis -pid=<target-pid>")
-    flag.PrintDefaults()
-    log.Fatalf("Missing or invalid PID")
-  }
-  if(port<1 || port>65535){
-    log.Fatalf("Invalid port number %d", port)
-  }
-  fmt.Printf("Starting Goroutine Visualizer for PID %d on PORT %d\n", pid, port)
+		dump, err := proc.FetchGor(portStr)
+		if err != nil {
+			// target process might be restarting — just wait it out
+			fmt.Printf("\033[H\033[2J\n[warning] pprof unreachable: %v\n", err)
+			return
+		}
 
+		goroutines, err := parser.Parse(dump)
+		if err != nil {
+			fmt.Printf("\033[H\033[2J\n[warning] parse failed: %v\n", err)
+			return
+		}
 
-  status, err := proc.ReadStatus(pid)
-  if err != nil{
-    log.Fatalf("Failed to read status: %v", err)
-  }
-  fmt.Printf("PID: %d - %s - Threads %s - VmRSS %s\n",pid, status["Name"],status["Threads"],status["VmRSS"])
-  
-  // fetch and print raw goroutine dump
+		fmt.Print("\033[H\033[2J")
+		display.Render(pid, port, status, goroutines)
+	}
 
-  portStr := fmt.Sprintf("%d", port)
-  dump, err := proc.FetchGor(portStr)
-  if err != nil{
-    log.Fatalf("Failed to fetch goroutine dump: %v", err)
-  }
+	// render once immediately so there's no blank screen at startup
+	renderFrame()
 
-  goroutines, err := parser.Parse(dump)
-  if err!=nil{
-    log.Fatalf("Failed to parse goroutine dump: %v", err)
-  }
-  fmt.Printf("Total goroutines: %d\n\n", len(goroutines))
-  display.Render(status,goroutines)
-   
+	// tick every N seconds and re-render
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
 
-} 
+	for range ticker.C {
+		renderFrame()
+	}
+}
